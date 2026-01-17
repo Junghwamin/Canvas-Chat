@@ -1,10 +1,28 @@
 # CLAUDE.md - RAG_PDF 프로젝트 업데이트 기록
 
+> **⚠️ 중요**: 이 프로젝트의 모든 변경 사항, 에러, 버그 수정은 반드시 이 파일에 기록되어야 합니다. 자세한 규칙은 `CONTRIBUTING.md`를 참고하세요.
+
 ## 업데이트 일자: 2026-01-17
 
 ---
 
-## 1. Canvas Chat 통합
+## 1. GitHub 배포 및 문서화 강화
+
+### 🚀 배포 완료
+- **저장소**: [https://github.com/Junghwamin/Canvas-Chat](https://github.com/Junghwamin/Canvas-Chat)
+- **보안 조치**:
+  - `frontend/src/components/canvas/TestInit.tsx` 하드코딩 API 키 제거
+  - Git 히스토리 초기화 (Secrets Scrubbing)
+  - `.gitignore` 강화 및 `.env` 파일 제외
+- **구조 개선**: `backend/`와 `frontend/` 모노레포 구조로 정리 및 레거시 파일 삭제
+
+### 📝 문서화 가이드라인 추가
+- `CONTRIBUTING.md` 생성: 에이전트 작업 지침 및 로그 기록 규칙 정의
+- `CLAUDE.md`를 갱신 로그(Changelog)의 중심으로 설정
+
+---
+
+## 2. Canvas Chat 통합
 
 ### 추가된 기능
 - React Flow 기반 무한 캔버스 UI
@@ -21,7 +39,7 @@
 
 ---
 
-## 2. RAG 문서 Q&A 기능 강화
+## 3. RAG 문서 Q&A 기능 강화
 
 ### 📄 엑셀 파일 지원 추가
 - `.xlsx` 및 `.xls` (구형 엑셀) 파일 지원
@@ -39,7 +57,7 @@
 
 ---
 
-## 3. Agent 개념 적용 (RAG 개선)
+## 4. Agent 개념 적용 (RAG 개선)
 
 ### Chain of Thought (사고의 연쇄)
 5단계 사고 과정 프롬프트 추가:
@@ -57,17 +75,21 @@
 
 ---
 
-## 4. 버그 수정 및 최적화
+## 5. 버그 수정 및 최적화
 
-### 주요 수정 사항
-- **한글 인코딩**: 텍스트 파일 UTF-8 인코딩 명시
-- **데이터 초기화**: 꼬인 벡터 DB 초기화 및 복구 가이드 제공
-- **할루시네이션 오판 해결**: 동일 파일 중복 업로드 시 정확한 분석 확인
-- **SSR 에러**: pdfjs-dist lazy loading 적용
+### Troubleshooting
+- **문제**: 한글 문서가 깨져서 보이는 현상
+  - **원인**: `TextLoader` 기본 인코딩 문제
+  - **해결**: `encoding='utf-8'` 명시적 설정 (`document_loader.py`)
+- **문제**: SSR 환경에서 `DOMMatrix is not defined` 에러
+  - **원인**: `pdfjs-dist`가 서버 사이드에서 로드됨
+  - **해결**: Dynamic Import 및 Lazy Loading 적용 (`fileService.ts`)
+- **문제**: 동일 엑셀 파일 5개 중복 업로드를 할루시네이션으로 오판
+  - **해결**: 파일 크기/청크 수 비교를 통해 실제로 동일 파일임을 검증
 
 ---
 
-## 5. 설치된 패키지
+## 6. 설치된 패키지
 
 ### Backend
 ```bash
@@ -81,7 +103,7 @@ npm install @xyflow/react zustand dexie openai @google/generative-ai react-markd
 
 ---
 
-## 6. 실행 방법
+## 7. 실행 방법
 
 ### Backend
 ```bash
@@ -99,3 +121,4 @@ npm run dev
 - 문서 Q&A: http://localhost:3000/documents
 - Canvas Chat: http://localhost:3000/canvas
 - API 문서: http://localhost:8000/docs
+
