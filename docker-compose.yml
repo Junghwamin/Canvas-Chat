@@ -1,0 +1,14 @@
+services:
+  canvas-chat:
+    build: .
+    container_name: canvas-chat
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    volumes:
+      # 로컬 개발 시 코드 변경 반영을 위해 주석 처리 해제
+      # - ./:/app
+      # - /app/node_modules
+      - ./logs:/app/logs
