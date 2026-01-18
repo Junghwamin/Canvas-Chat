@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useId } from 'react';
 import type { DragEvent } from 'react';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import type { ModelType, Message } from '../../../types';
@@ -6,6 +6,7 @@ import { MODELS } from '../../../types';
 import { streamChat, streamChatWithImages, generateSummary, estimateTokens } from '../../../services/llmService';
 import { processAndSaveAttachment, formatFileSize, getFileType, imageToBase64, readTextFile, extractPdfText } from '../../../services/fileService';
 import { splitByHeadings, calculateSplitNodePositions, SPLIT_MODE_PROMPT } from '../../../services/splitResponseService';
+import Spinner from '../../ui/Spinner';
 
 interface InputPanelProps {
   onAddNode?: (parentId: string) => void;
@@ -17,6 +18,47 @@ interface FilePreview {
   preview?: string;
   type: 'image' | 'pdf' | 'text' | 'code';
 }
+
+// SVG Icons
+const Icons = {
+  attach: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M14.5 9.5l-5.5 5.5a4 4 0 01-5.66-5.66l7-7a2.5 2.5 0 013.54 3.54l-6.5 6.5a1 1 0 01-1.42-1.42l5-5" />
+    </svg>
+  ),
+  split: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M9 2v6M9 14v2M5 8l4 4 4-4" />
+      <circle cx="4" cy="14" r="2" />
+      <circle cx="14" cy="14" r="2" />
+    </svg>
+  ),
+  send: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 2L8 10M16 2l-5 14-3-6-6-3 14-5z" />
+    </svg>
+  ),
+  close: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M3 3l8 8M11 3l-8 8" />
+    </svg>
+  ),
+  pdf: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M4 1a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5l-4-4H4zm5 0v4h4" />
+    </svg>
+  ),
+  code: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M5 4L1 8l4 4M11 4l4 4-4 4M9 2l-2 12" />
+    </svg>
+  ),
+  text: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M2 3h12M2 7h8M2 11h10M2 15h6" />
+    </svg>
+  ),
+};
 
 export default function InputPanel(_props: InputPanelProps) {
   const {
@@ -39,6 +81,8 @@ export default function InputPanel(_props: InputPanelProps) {
   const [attachments, setAttachments] = useState<FilePreview[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaId = useId();
+  const modelSelectId = useId();
 
   // 파일 추가 처리
   const addFiles = useCallback(async (files: File[]) => {
@@ -81,27 +125,31 @@ export default function InputPanel(_props: InputPanelProps) {
         }
         : { x: 400, y: 100 };
 
-      // 첨부파일 텍스트 추출
-      let attachmentContent = '';
+      // 첨부파일 텍스트 추출 (병렬 처리로 성능 최적화)
       const imageAttachments: { base64: string; mimeType: string }[] = [];
 
-      for (const attachment of currentAttachments) {
-        if (attachment.type === 'image') {
-          const base64 = attachment.preview?.split(',')[1] || '';
-          imageAttachments.push({
-            base64,
-            mimeType: attachment.file.type,
-          });
-        } else if (attachment.type === 'pdf') {
-          const pdfText = await extractPdfText(attachment.file);
-          if (pdfText) {
-            attachmentContent += `\n\n[PDF: ${attachment.file.name}]\n${pdfText}`;
+      // 병렬로 모든 첨부파일 처리
+      const attachmentResults = await Promise.all(
+        currentAttachments.map(async (attachment) => {
+          if (attachment.type === 'image') {
+            const base64 = attachment.preview?.split(',')[1] || '';
+            imageAttachments.push({
+              base64,
+              mimeType: attachment.file.type,
+            });
+            return '';
+          } else if (attachment.type === 'pdf') {
+            const pdfText = await extractPdfText(attachment.file);
+            return pdfText ? `\n\n[PDF: ${attachment.file.name}]\n${pdfText}` : '';
+          } else if (attachment.type === 'text' || attachment.type === 'code') {
+            const text = await readTextFile(attachment.file);
+            return `\n\n[${attachment.file.name}]\n\`\`\`\n${text}\n\`\`\``;
           }
-        } else if (attachment.type === 'text' || attachment.type === 'code') {
-          const text = await readTextFile(attachment.file);
-          attachmentContent += `\n\n[${attachment.file.name}]\n\`\`\`\n${text}\n\`\`\``;
-        }
-      }
+          return '';
+        })
+      );
+
+      const attachmentContent = attachmentResults.join('');
 
       const fullUserContent = messageContent + attachmentContent;
 
@@ -307,17 +355,20 @@ export default function InputPanel(_props: InputPanelProps) {
 
   return (
     <div
-      className={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-gray-900 to-transparent ${isDragging ? 'ring-2 ring-pink-500 ring-inset' : ''
+      className={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[var(--bg-base)] to-transparent ${isDragging ? 'ring-2 ring-[var(--accent-primary)] ring-inset' : ''
         }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      role="region"
+      aria-label="메시지 입력 영역"
     >
       <div className="max-w-4xl mx-auto">
         {/* 드래그 오버레이 */}
         {isDragging && (
-          <div className="absolute inset-0 bg-pink-900/50 flex items-center justify-center pointer-events-none">
-            <div className="text-white text-lg font-medium">
+          <div className="absolute inset-0 bg-[var(--accent-primary)]/30 backdrop-blur-sm flex items-center justify-center pointer-events-none rounded-[var(--radius-lg)]">
+            <div className="text-[var(--text-primary)] text-lg font-medium flex items-center gap-2">
+              {Icons.attach}
               파일을 여기에 놓으세요
             </div>
           </div>
@@ -325,40 +376,47 @@ export default function InputPanel(_props: InputPanelProps) {
 
         {/* 첨부파일 미리보기 */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-800 rounded-t-lg">
+          <div
+            className="flex flex-wrap gap-2 mb-2 p-2 bg-[var(--bg-elevated)] rounded-t-[var(--radius-lg)] border border-[var(--border-default)] border-b-0"
+            role="list"
+            aria-label="첨부 파일 목록"
+          >
             {attachments.map((attachment, index) => (
               <div
                 key={index}
                 className="relative group"
+                role="listitem"
               >
                 {attachment.type === 'image' && attachment.preview ? (
                   <div className="relative w-16 h-16">
                     <img
                       src={attachment.preview}
                       alt={attachment.file.name}
-                      className="w-full h-full object-cover rounded"
+                      className="w-full h-full object-cover rounded-[var(--radius-md)]"
                     />
                     <button
                       onClick={() => removeAttachment(index)}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-[var(--accent-danger)] rounded-full text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label={`${attachment.file.name} 제거`}
                     >
-                      ×
+                      {Icons.close}
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-sm text-white">
-                    <span>
-                      {attachment.type === 'pdf' ? '📄' : attachment.type === 'code' ? '💻' : '📝'}
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 bg-[var(--bg-hover)] rounded-[var(--radius-md)] text-sm text-[var(--text-primary)]">
+                    <span className="text-[var(--accent-primary)]">
+                      {attachment.type === 'pdf' ? Icons.pdf : attachment.type === 'code' ? Icons.code : Icons.text}
                     </span>
                     <span className="max-w-24 truncate">{attachment.file.name}</span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-[var(--text-muted)]">
                       ({formatFileSize(attachment.file.size)})
                     </span>
                     <button
                       onClick={() => removeAttachment(index)}
-                      className="text-red-400 hover:text-red-300 ml-1"
+                      className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] ml-1 transition-colors"
+                      aria-label={`${attachment.file.name} 제거`}
                     >
-                      ×
+                      {Icons.close}
                     </button>
                   </div>
                 )}
@@ -369,44 +427,55 @@ export default function InputPanel(_props: InputPanelProps) {
 
         {/* 선택된 노드 표시 */}
         {selectedNodeId && (
-          <div className="mb-2 px-3 py-1 bg-pink-900/50 rounded text-sm text-pink-300">
+          <div
+            className="mb-2 px-3 py-1.5 bg-[var(--accent-primary)]/20 border border-[var(--accent-primary)]/30 rounded-[var(--radius-md)] text-sm text-[var(--accent-primary)]"
+            role="status"
+          >
             선택된 노드에서 분기합니다
           </div>
         )}
 
         <div className="flex gap-2">
           {/* 모델 선택 */}
-          <select
-            value={currentModel}
-            onChange={(e) => setCurrentModel(e.target.value as ModelType)}
-            className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-pink-500"
-          >
-            {MODELS.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <label htmlFor={modelSelectId} className="sr-only">AI 모델 선택</label>
+            <select
+              id={modelSelectId}
+              value={currentModel}
+              onChange={(e) => setCurrentModel(e.target.value as ModelType)}
+              className="px-3 py-2 bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-[var(--radius-md)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+              aria-label="AI 모델 선택"
+            >
+              {MODELS.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* 분할 모드 토글 */}
           <button
             onClick={() => updateCanvas(currentCanvas.id, { splitMode: !currentCanvas.splitMode })}
-            className={`px-3 py-2 border rounded-lg text-sm transition-colors flex items-center gap-1 ${currentCanvas.splitMode
-                ? 'bg-purple-600 border-purple-500 text-white'
-                : 'bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700'
+            className={`px-3 py-2 border rounded-[var(--radius-md)] text-sm transition-colors flex items-center gap-1.5 ${currentCanvas.splitMode
+                ? 'bg-[var(--accent-secondary)] border-[var(--accent-secondary)] text-white'
+                : 'bg-[var(--bg-elevated)] border-[var(--border-default)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
               }`}
+            aria-label={`응답 분할 모드 ${currentCanvas.splitMode ? '켜짐' : '꺼짐'}`}
+            aria-pressed={currentCanvas.splitMode}
             title="응답을 주제별 노드로 분할 (## 헤딩 기준)"
           >
-            🌿 분할
+            {Icons.split}
+            <span className="hidden sm:inline">분할</span>
           </button>
 
           {/* 파일 첨부 버튼 */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white hover:bg-gray-700 transition-colors"
-            title="파일 첨부 (이미지, PDF, 텍스트)"
+            className="px-3 py-2 bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-[var(--radius-md)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+            aria-label="파일 첨부 (이미지, PDF, 텍스트)"
           >
-            📎
+            {Icons.attach}
           </button>
           <input
             ref={fileInputRef}
@@ -415,11 +484,14 @@ export default function InputPanel(_props: InputPanelProps) {
             accept="image/*,.pdf,.txt,.md,.js,.ts,.jsx,.tsx,.py,.java,.cpp,.c,.h,.css,.html,.json,.xml,.yaml,.yml"
             onChange={handleFileSelect}
             className="hidden"
+            aria-hidden="true"
           />
 
           {/* 입력창 */}
           <div className="flex-1 relative">
+            <label htmlFor={textareaId} className="sr-only">메시지 입력</label>
             <textarea
+              id={textareaId}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -428,9 +500,10 @@ export default function InputPanel(_props: InputPanelProps) {
                   ? '선택된 노드에서 새 질문을 입력하세요...'
                   : '질문을 입력하세요... (파일을 드래그하여 첨부 가능)'
               }
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-pink-500 resize-none"
+              className="w-full px-4 py-2 bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] resize-none transition-colors"
               rows={1}
               disabled={isGenerating}
+              aria-describedby={selectedNodeId ? 'selected-node-info' : undefined}
             />
           </div>
 
@@ -438,12 +511,21 @@ export default function InputPanel(_props: InputPanelProps) {
           <button
             onClick={handleSend}
             disabled={((!input.trim() && attachments.length === 0) || isGenerating)}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${isGenerating
-              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-              : 'bg-pink-600 hover:bg-pink-700 text-white'
+            className={`px-4 py-2 rounded-[var(--radius-md)] font-medium transition-colors flex items-center gap-2 ${isGenerating
+              ? 'bg-[var(--bg-hover)] text-[var(--text-muted)] cursor-not-allowed'
+              : 'bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-hover)] text-white'
               }`}
+            aria-label={isGenerating ? '생성 중...' : '메시지 전송'}
+            aria-busy={isGenerating}
           >
-            {isGenerating ? '⏳' : '전송'}
+            {isGenerating ? (
+              <Spinner size="sm" variant="white" label="생성 중" />
+            ) : (
+              <>
+                {Icons.send}
+                <span className="hidden sm:inline">전송</span>
+              </>
+            )}
           </button>
         </div>
       </div>

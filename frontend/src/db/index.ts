@@ -93,19 +93,28 @@ export const nodeService = {
     return db.nodes.where('parentId').equals(parentId).toArray();
   },
 
-  // 경로 추적 (현재 노드 → 루트)
+  // 경로 추적 (현재 노드 → 루트) - 성능 최적화 버전
   async getPathToRoot(nodeId: string): Promise<ChatNode[]> {
+    // 시작 노드 가져오기
+    const startNode = await db.nodes.get(nodeId);
+    if (!startNode) return [];
+
+    // 해당 캔버스의 모든 노드를 한 번에 로드 (N번 쿼리 -> 1번 쿼리)
+    const allNodes = await db.nodes.where('canvasId').equals(startNode.canvasId).toArray();
+    const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+
+    // 경로 추적 (push 사용 후 reverse - O(1) + O(n))
     const path: ChatNode[] = [];
     let currentId: string | null = nodeId;
 
     while (currentId) {
-      const node: ChatNode | undefined = await db.nodes.get(currentId);
+      const node = nodeMap.get(currentId);
       if (!node) break;
-      path.unshift(node); // 앞에 추가 (루트가 첫 번째가 되도록)
+      path.push(node); // O(1)
       currentId = node.parentId;
     }
 
-    return path;
+    return path.reverse(); // 한 번만 O(n)
   },
 };
 

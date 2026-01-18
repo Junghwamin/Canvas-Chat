@@ -1,21 +1,7 @@
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Message, ModelType } from '../types';
 import { MODELS } from '../types';
 
-// API 클라이언트 생성
-const getOpenAIClient = (apiKey: string) => {
-  return new OpenAI({
-    apiKey,
-    dangerouslyAllowBrowser: true, // 브라우저에서 사용 허용
-  });
-};
-
-const getGoogleClient = (apiKey: string) => {
-  return new GoogleGenerativeAI(apiKey);
-};
-
-// 스트리밍 응답 생성
+// 스트리밍 응답 생성 (서버 API 프록시 사용)
 export async function* streamChat(
   messages: Message[],
   model: ModelType,
@@ -31,56 +17,58 @@ export async function* streamChat(
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
     }
 
-    const client = getOpenAIClient(apiKeys.openai);
-    const stream = await client.chat.completions.create({
-      model: model,
-      messages: messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      stream: true,
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        apiKey: apiKeys.openai,
+      }),
     });
 
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        yield content;
-      }
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'API 호출 실패');
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('스트림을 읽을 수 없습니다.');
+
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
     }
   } else if (modelInfo.provider === 'google') {
     if (!apiKeys.google) {
       throw new Error('Google API 키가 설정되지 않았습니다.');
     }
 
-    const client = getGoogleClient(apiKeys.google);
-    const genModel = client.getGenerativeModel({ model: model });
-
-    // Gemini 형식으로 변환
-    const systemPrompt = messages.find((m) => m.role === 'system')?.content || '';
-    const history = messages
-      .filter((m) => m.role !== 'system')
-      .map((m) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      }));
-
-    const lastMessage = history.pop();
-    if (!lastMessage) {
-      throw new Error('메시지가 없습니다.');
-    }
-
-    const chat = genModel.startChat({
-      history: history as any,
-      systemInstruction: systemPrompt || undefined,
+    const response = await fetch('/api/chat/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        apiKey: apiKeys.google,
+      }),
     });
 
-    const result = await chat.sendMessageStream(lastMessage.parts[0].text);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'API 호출 실패');
+    }
 
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        yield text;
-      }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('스트림을 읽을 수 없습니다.');
+
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
     }
   }
 }
@@ -102,82 +90,60 @@ export async function* streamChatWithImages(
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
     }
 
-    const client = getOpenAIClient(apiKeys.openai);
-
-    // 마지막 사용자 메시지에 이미지 추가
-    const formattedMessages = messages.map((m, index) => {
-      if (index === messages.length - 1 && m.role === 'user') {
-        const content: any[] = [{ type: 'text', text: m.content }];
-        for (const img of images) {
-          content.push({
-            type: 'image_url',
-            image_url: {
-              url: `data:${img.mimeType};base64,${img.base64}`,
-            },
-          });
-        }
-        return { role: m.role, content };
-      }
-      return { role: m.role, content: m.content };
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        apiKey: apiKeys.openai,
+        images,
+      }),
     });
 
-    const stream = await client.chat.completions.create({
-      model: model,
-      messages: formattedMessages as any,
-      stream: true,
-    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'API 호출 실패');
+    }
 
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        yield content;
-      }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('스트림을 읽을 수 없습니다.');
+
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
     }
   } else if (modelInfo.provider === 'google') {
     if (!apiKeys.google) {
       throw new Error('Google API 키가 설정되지 않았습니다.');
     }
 
-    const client = getGoogleClient(apiKeys.google);
-    const genModel = client.getGenerativeModel({ model: model });
-
-    const systemPrompt = messages.find((m) => m.role === 'system')?.content || '';
-    const history = messages
-      .filter((m) => m.role !== 'system')
-      .slice(0, -1)
-      .map((m) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      }));
-
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== 'user') {
-      throw new Error('마지막 메시지가 사용자 메시지가 아닙니다.');
-    }
-
-    // 이미지 파트 추가
-    const parts: any[] = [{ text: lastMessage.content }];
-    for (const img of images) {
-      parts.push({
-        inlineData: {
-          mimeType: img.mimeType,
-          data: img.base64,
-        },
-      });
-    }
-
-    const chat = genModel.startChat({
-      history: history as any,
-      systemInstruction: systemPrompt || undefined,
+    const response = await fetch('/api/chat/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        model,
+        apiKey: apiKeys.google,
+        images,
+      }),
     });
 
-    const result = await chat.sendMessageStream(parts);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'API 호출 실패');
+    }
 
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        yield text;
-      }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('스트림을 읽을 수 없습니다.');
+
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
     }
   }
 }
@@ -201,6 +167,41 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// 대화 요약 생성 (AI 정리 기능)
+export async function* generateConversationSummary(
+  conversationMarkdown: string,
+  model: ModelType,
+  apiKeys: { openai?: string; google?: string }
+): AsyncGenerator<string, void, unknown> {
+  const systemPrompt = `당신은 대화 요약 전문가입니다. 다음 대화를 분석하여 구조화된 요약을 작성해주세요.
+
+## 출력 형식 (반드시 준수):
+
+### 핵심 내용
+- 대화의 주요 주제 3-5개를 불릿 포인트로 정리
+
+### 주요 논점
+- 논의된 중요한 포인트들
+- 각 논점에 대한 결론이나 합의점
+
+### 결론
+- 최종 결론이나 액션 아이템
+- 다음 단계에 대한 제안
+
+### 추가 인사이트
+- 대화에서 도출된 추가 인사이트나 제안
+- 개선점이나 주의사항
+
+마크다운 형식으로 깔끔하게 작성하세요.`;
+
+  const messages: Message[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `다음 대화를 분석하고 정리해주세요:\n\n${conversationMarkdown}` },
+  ];
+
+  yield* streamChat(messages, model, apiKeys);
+}
+
 // 맥락 압축
 export async function compressContext(
   content: string,
@@ -209,22 +210,40 @@ export async function compressContext(
   // 간단한 압축: 긴 내용을 요약
   if (content.length <= 500) return content;
 
-  // LLM을 사용한 압축 (선택적)
+  // 서버 API를 통한 압축
   if (apiKeys.openai) {
     try {
-      const client = getOpenAIClient(apiKeys.openai);
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: '다음 내용을 핵심만 남기고 200자 이내로 요약하세요.',
-          },
-          { role: 'user', content },
-        ],
-        max_tokens: 200,
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: '다음 내용을 핵심만 남기고 200자 이내로 요약하세요.',
+            },
+            { role: 'user', content },
+          ],
+          model: 'gpt-4o-mini',
+          apiKey: apiKeys.openai,
+        }),
       });
-      return response.choices[0]?.message?.content || content.substring(0, 200);
+
+      if (!response.ok) {
+        return content.substring(0, 200) + '...';
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) return content.substring(0, 200) + '...';
+
+      const decoder = new TextDecoder();
+      const chunks: string[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(decoder.decode(value, { stream: true }));
+      }
+      return chunks.join('') || content.substring(0, 200);
     } catch {
       return content.substring(0, 200) + '...';
     }

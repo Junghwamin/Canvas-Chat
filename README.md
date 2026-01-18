@@ -14,6 +14,7 @@
 - **대화 히스토리**: 이전 대화 맥락을 이해하여 후속 질문 대응 (최근 10개)
 - **Chain of Thought**: 5단계 추론 과정으로 정확한 답변 생성
 - **Few Shot Learning**: 예시 기반 답변 패턴 적용
+- **📊 통계 내보내기** *(NEW)*: AI 응답에서 통계 데이터 자동 감지 → Excel/CSV 다운로드, 차트 시각화
 
 ### 🎨 Canvas Chat (`/canvas`)
 - **무한 캔버스**: React Flow 기반 비선형 대화 UI
@@ -21,6 +22,8 @@
 - **노드 기반 대화**: 트리 구조의 대화 관리
 - **로컬 저장**: IndexedDB 기반 데이터 영속성
 - **API 키 관리**: 사용자별 API 키 설정
+- **🤖 AI 정리** *(NEW)*: 대화를 AI가 자동으로 구조화하여 정리 (핵심 내용, 주요 논점, 결론)
+- **📤 문서 전송** *(NEW)*: Canvas 대화를 문서 Q&A로 바로 전송하여 RAG 검색 가능
 
 ---
 
@@ -32,9 +35,10 @@
 | **AI/LLM** | OpenAI GPT-4o, Google Gemini, text-embedding-3-small |
 | **Vector DB** | ChromaDB |
 | **Database** | SQLite, SQLAlchemy |
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS |
+| **Frontend** | Next.js 15, TypeScript, Tailwind CSS |
 | **Canvas UI** | React Flow, Zustand, Dexie.js |
 | **문서 처리** | pypdf, docx2txt, pandas, openpyxl, xlrd |
+| **차트/내보내기** | Recharts, xlsx, html2canvas |
 
 ---
 
@@ -161,6 +165,22 @@ curl -X POST "http://localhost:8000/api/v1/chat/query" \
 
 ```bash
 curl -X DELETE "http://localhost:8000/api/v1/documents/5"
+```
+
+### 텍스트 문서 업로드 (Canvas → Documents 전송용)
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/documents/upload-text" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "# 캔버스 대화 내용\n\n## Conversation...",
+    "filename": "my-canvas.md",
+    "source_type": "canvas",
+    "metadata": {
+      "canvas_id": "uuid",
+      "canvas_name": "캔버스 이름"
+    }
+  }'
 ```
 
 ---

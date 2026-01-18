@@ -944,7 +944,7 @@ for await (const chunk of client.queryStream('프로젝트 목표가 뭐야?')) 
 
 ---
 
-## 현재 구현된 API (2026-01-17 업데이트)
+## 현재 구현된 API (2026-01-19 업데이트)
 
 > 다음은 현재 실제로 구현되어 작동하는 API 엔드포인트입니다.
 
@@ -1027,6 +1027,53 @@ DELETE /api/v1/documents/{document_id}
   "id": 1
 }
 ```
+
+---
+
+### 텍스트 문서 업로드 (NEW - 2026-01-19)
+
+Canvas 대화 내용을 마크다운 문서로 저장하고 벡터 임베딩합니다.
+
+```http
+POST /api/v1/documents/upload-text
+Content-Type: application/json
+```
+
+**Request Body**
+```json
+{
+  "content": "# 캔버스 대화 내용\n\n## Conversation\n\n### User\n안녕하세요...",
+  "filename": "my-canvas.md",
+  "source_type": "canvas",
+  "metadata": {
+    "canvas_id": "uuid-1234",
+    "canvas_name": "AI 프로젝트 회의",
+    "node_count": 15
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| content | String | Yes | 마크다운 형식의 문서 내용 |
+| filename | String | Yes | 저장할 파일명 (.md 자동 추가) |
+| source_type | String | No | 출처 유형 (기본: "text") |
+| metadata | Object | No | 추가 메타데이터 (canvas_id, canvas_name 등) |
+
+**Response (200 OK)**
+```json
+{
+  "filename": "my-canvas.md",
+  "status": "success",
+  "id": 5,
+  "source_type": "canvas",
+  "chunk_count": 3
+}
+```
+
+**사용 사례:**
+- Canvas Chat에서 "문서 Q&A로 전송" 버튼 클릭 시
+- AI 정리 결과를 RAG 검색 가능하도록 저장
 
 ---
 

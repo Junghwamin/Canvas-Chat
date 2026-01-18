@@ -1,13 +1,21 @@
 import shutil
 import os
-from typing import List
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.db import models
 from app.db.database import get_db
 from app.core.rag.document_loader import UniversalDocumentLoader
 from app.core.rag.vector_store import VectorStoreManager
+
+
+class TextDocumentRequest(BaseModel):
+    content: str
+    filename: str
+    source_type: Optional[str] = "text"
+    metadata: Optional[Dict[str, Any]] = None
 
 router = APIRouter()
 vector_store_manager = VectorStoreManager()
@@ -61,9 +69,87 @@ async def upload_document(
             raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
         return {"filename": file.filename, "status": "success", "id": db_doc.id}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload-text")
+async def upload_text_document(
+    request: TextDocumentRequest,
+    db: Session = Depends(get_db)
+):
+    """Upload text content as a document (e.g., from Canvas chat export)"""
+    try:
+        # Ensure filename has .md extension
+        filename = request.filename
+        if not filename.endswith('.md'):
+            filename = filename + '.md'
+
+        # Save content as .md file
+        file_path = os.path.join(UPLOAD_DIR, filename)
+
+        # Handle duplicate filenames
+        base_name = filename[:-3]  # Remove .md
+        counter = 1
+        while os.path.exists(file_path):
+            filename = f"{base_name}_{counter}.md"
+            file_path = os.path.join(UPLOAD_DIR, filename)
+            counter += 1
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(request.content)
+
+        # Create DB record
+        db_doc = models.Document(
+            user_id=1,  # Temporary hardcoded user for MVP
+            filename=filename,
+            original_filename=request.filename,
+            file_path=file_path,
+            file_type="text/markdown",
+            file_size=len(request.content.encode('utf-8')),
+            status="processing"
+        )
+        db.add(db_doc)
+        db.commit()
+        db.refresh(db_doc)
+
+        # Load and Index
+        try:
+            documents = UniversalDocumentLoader.load(file_path)
+            # Add metadata
+            for doc in documents:
+                doc.metadata["document_id"] = db_doc.id
+                doc.metadata["filename"] = filename
+                doc.metadata["source_type"] = request.source_type
+                if request.metadata:
+                    doc.metadata.update(request.metadata)
+
+            vector_store_manager.add_documents(documents)
+
+            # Update status
+            db_doc.status = "completed"
+            db_doc.chunk_count = len(documents)
+            db.commit()
+
+        except Exception as e:
+            db_doc.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+        return {
+            "filename": filename,
+            "status": "success",
+            "id": db_doc.id,
+            "source_type": request.source_type,
+            "chunk_count": db_doc.chunk_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/")
 def list_documents(db: Session = Depends(get_db)):

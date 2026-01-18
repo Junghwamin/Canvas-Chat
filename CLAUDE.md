@@ -2,6 +2,130 @@
 
 > **⚠️ 중요**: 이 프로젝트의 모든 변경 사항, 에러, 버그 수정은 반드시 이 파일에 기록되어야 합니다. 자세한 규칙은 `CONTRIBUTING.md`를 참고하세요.
 
+## 업데이트 일자: 2026-01-19
+
+---
+
+## 0. Canvas AI 정리 + Documents 전송 + 통계 Excel/그래프 기능 추가 (2026-01-19)
+
+### 🤖 Feature 1: AI 정리 버튼 (Canvas ExportModal)
+Canvas 대화를 AI가 자동으로 구조화하여 정리하는 기능
+
+**수정된 파일:**
+- `frontend/src/services/llmService.ts` - `generateConversationSummary()` 함수 추가
+- `frontend/src/components/canvas-org/ui/ExportModal.tsx` - AI 정리 포맷 및 UI 추가
+
+**기능:**
+- 내보내기 형식에 "AI 정리" 옵션 추가 (JSON, Markdown, AI 정리)
+- 스트리밍 방식으로 AI 요약 실시간 표시
+- 요약 결과: 핵심 내용, 주요 논점, 결론, 추가 인사이트
+- 클립보드 복사 기능
+
+### 📤 Feature 2: Canvas → Documents 전송
+Canvas 대화를 문서 Q&A로 전송하여 RAG 검색 가능하게 하는 기능
+
+**수정된 파일:**
+- `backend/app/api/endpoints/documents.py` - `/upload-text` 엔드포인트 추가
+- `frontend/src/components/canvas-org/ui/ExportModal.tsx` - "문서 Q&A로 전송" 버튼 추가
+
+**새 API 엔드포인트:**
+```
+POST /api/v1/documents/upload-text
+{
+  "content": "마크다운 내용",
+  "filename": "파일명.md",
+  "source_type": "canvas",
+  "metadata": { "canvas_id": "...", "canvas_name": "..." }
+}
+```
+
+### 📊 Feature 3: 통계 Excel/그래프 내보내기
+Documents Q&A 응답에서 통계 데이터를 감지하여 Excel/차트로 내보내기
+
+**신규 생성 파일:**
+- `frontend/src/utils/statisticsParser.ts` - 통계 데이터 파싱 (테이블, 리스트, 퍼센트, 비교 데이터)
+- `frontend/src/services/exportService.ts` - Excel/CSV 내보내기, 차트 이미지 저장
+- `frontend/src/components/documents/ChartModal.tsx` - Recharts 기반 차트 모달 (막대, 선, 파이, 영역)
+- `frontend/src/components/documents/StatisticsPanel.tsx` - 통계 패널 (펼치기/접기, 내보내기 버튼)
+
+**수정된 파일:**
+- `frontend/src/app/documents/page.tsx` - 통계 감지 및 패널/모달 통합
+
+**기능:**
+- AI 응답에서 자동으로 통계 데이터 감지 (마크다운 테이블, 숫자 리스트, 퍼센트 등)
+- Excel (.xlsx), CSV 다운로드
+- 4종류 차트 시각화 (막대, 선, 파이, 영역)
+- 차트 PNG/JPEG 이미지 저장
+- 클립보드 복사 (탭 구분 형식)
+
+### 추가된 패키지
+```bash
+npm install xlsx recharts html2canvas
+```
+
+---
+
+## 업데이트 일자: 2026-01-18
+
+---
+
+## 1. Vercel React Best Practices 스킬 기반 최적화 (2026-01-18)
+
+### 스킬 설치
+```bash
+npx skillscokac -d vercel-react-best-practices "~/.claude/skills"
+```
+
+### 보안 패치 (Critical)
+
+#### API 키 노출 수정
+- **문제**: 클라이언트에서 `dangerouslyAllowBrowser: true`로 API 키 직접 사용
+- **해결**: 서버 API Route Handler 생성하여 프록시 처리
+  - `frontend/src/app/api/chat/route.ts` - OpenAI 프록시
+  - `frontend/src/app/api/chat/gemini/route.ts` - Gemini 프록시
+  - `frontend/src/services/llmService.ts` - 서버 API 호출로 변경
+
+#### XSS 취약점 수정
+- **문제**: `innerHTML` 직접 사용
+- **해결**: DOMPurify로 sanitize (동적 import로 SSR 호환)
+  - `frontend/src/components/canvas-org/ui/MarkdownRenderer.tsx`
+
+### 성능 최적화 (High)
+
+#### Canvas.tsx Map 기반 룩업
+- **문제**: `countDescendants` 재귀 함수가 O(n^2)
+- **해결**: `childrenMap`과 `descendantCountCache` useMemo로 O(n)으로 최적화
+  - `frontend/src/components/canvas-org/Canvas.tsx`
+
+#### InputPanel.tsx 병렬 처리
+- **문제**: 첨부파일 순차 처리
+- **해결**: `Promise.all(files.map(...))`로 병렬 처리
+  - `frontend/src/components/canvas-org/ui/InputPanel.tsx`
+
+#### db/index.ts getPathToRoot 최적화
+- **문제**: N번 DB 쿼리 + Array.unshift O(n)
+- **해결**: 1번 쿼리 + Map 룩업 + push/reverse
+  - `frontend/src/db/index.ts`
+
+#### documents/page.tsx 스트림 처리 최적화
+- **문제**: `fullText +=` 문자열 연결 O(n^2)
+- **해결**: `chunks.push()` + `join()` O(n)
+  - `frontend/src/app/documents/page.tsx`
+
+### 레거시 파일 삭제
+- `frontend/src/components/canvas-original/` (삭제)
+- `frontend/src/components/canvas/` (삭제)
+- `frontend/src/db/database.ts` (삭제)
+- `frontend/src/types/canvas.ts` (삭제)
+- `frontend/src/utils/canvas.ts` (삭제)
+
+### 추가된 패키지
+```bash
+npm install dompurify @types/dompurify
+```
+
+---
+
 ## 업데이트 일자: 2026-01-17
 
 ---

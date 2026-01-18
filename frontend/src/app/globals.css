@@ -1,39 +1,80 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  
-  /* Canvas-specific colors (will be overridden in dark mode) */
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #1a1a1a;
-  --bg-tertiary: #2a2a2a;
-  
+
+  /* ========================================
+     Unified Design System
+     ======================================== */
+
+  /* Background Layers */
+  --bg-base: #0a0a0f;
+  --bg-surface: #12121a;
+  --bg-elevated: #1a1a24;
+  --bg-hover: #24242e;
+
+  /* Legacy aliases (for compatibility) */
+  --bg-primary: var(--bg-base);
+  --bg-secondary: var(--bg-surface);
+  --bg-tertiary: var(--bg-elevated);
+
+  /* Accent Colors - Cyan Primary */
   --accent-primary: #06b6d4;
+  --accent-primary-hover: #0891b2;
   --accent-secondary: #8b5cf6;
+  --accent-secondary-hover: #7c3aed;
   --accent-tertiary: #10b981;
-  
-  --node-user: #1e40af;
-  --node-user-border: #3b82f6;
+  --accent-danger: #ef4444;
+  --accent-danger-hover: #dc2626;
+  --accent-warning: #f59e0b;
+  --accent-success: #22c55e;
+
+  /* Node Colors */
+  --node-user: #0e7490;
+  --node-user-border: #06b6d4;
   --node-assistant: #5b21b6;
   --node-assistant-border: #8b5cf6;
   --node-system: #374151;
   --node-system-border: #6b7280;
-  
-  --text-primary: #ededed;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  
+
+  /* Text Colors */
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-inverse: #18181b;
+
+  /* Border Colors */
+  --border-default: #27272a;
+  --border-hover: #3f3f46;
+  --border-focus: var(--accent-primary);
+
+  /* Code Block Colors */
   --code-bg: #0d1117;
   --code-border: #30363d;
+
+  /* Transition Durations */
+  --transition-fast: 150ms;
+  --transition-normal: 200ms;
+  --transition-slow: 300ms;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.3);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* Theme variables handled through :root */
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -46,6 +87,81 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ========================================
+   Accessibility - Focus Styles
+   ======================================== */
+
+/* Keyboard focus indicator */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Remove default focus for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Enhanced focus for buttons and interactive elements */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-glow);
+}
+
+/* Input focus styles */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+}
+
+/* Skip to main content link (hidden until focused) */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  padding: 8px 16px;
+  z-index: 100;
+  transition: top var(--transition-fast);
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Screen reader only - visually hidden but accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ========================================
@@ -177,6 +293,7 @@ body {
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -198,9 +315,12 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 5px var(--accent-primary);
   }
+
   50% {
     box-shadow: 0 0 20px var(--accent-primary), 0 0 30px var(--accent-secondary);
   }
@@ -224,7 +344,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
   transition: left 0.5s ease;
 }
 
@@ -238,18 +358,54 @@ body {
   padding: 0 !important;
 }
 
-.hljs-keyword { color: #ff7b72; }
-.hljs-string { color: #a5d6ff; }
-.hljs-number { color: #79c0ff; }
-.hljs-function { color: #d2a8ff; }
-.hljs-comment { color: #8b949e; font-style: italic; }
-.hljs-class { color: #7ee787; }
-.hljs-variable { color: #ffa657; }
-.hljs-operator { color: #ff7b72; }
-.hljs-built_in { color: #ffa657; }
-.hljs-title { color: #d2a8ff; }
-.hljs-params { color: #c9d1d9; }
-.hljs-attr { color: #79c0ff; }
+.hljs-keyword {
+  color: #ff7b72;
+}
+
+.hljs-string {
+  color: #a5d6ff;
+}
+
+.hljs-number {
+  color: #79c0ff;
+}
+
+.hljs-function {
+  color: #d2a8ff;
+}
+
+.hljs-comment {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.hljs-class {
+  color: #7ee787;
+}
+
+.hljs-variable {
+  color: #ffa657;
+}
+
+.hljs-operator {
+  color: #ff7b72;
+}
+
+.hljs-built_in {
+  color: #ffa657;
+}
+
+.hljs-title {
+  color: #d2a8ff;
+}
+
+.hljs-params {
+  color: #c9d1d9;
+}
+
+.hljs-attr {
+  color: #79c0ff;
+}
 
 /* Markdown */
 .markdown-content h1,
@@ -261,9 +417,17 @@ body {
   font-weight: 600;
 }
 
-.markdown-content h1 { font-size: 1.5rem; }
-.markdown-content h2 { font-size: 1.25rem; }
-.markdown-content h3 { font-size: 1.1rem; }
+.markdown-content h1 {
+  font-size: 1.5rem;
+}
+
+.markdown-content h2 {
+  font-size: 1.25rem;
+}
+
+.markdown-content h3 {
+  font-size: 1.1rem;
+}
 
 .markdown-content p {
   margin: 0.5rem 0;

@@ -1,11 +1,36 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import { generateSummary } from '../../../services/llmService';
+import Modal, { ModalButton } from '../../ui/Modal';
+import Spinner from '../../ui/Spinner';
 
 interface NodeEditModalProps {
   nodeId: string;
   onClose: () => void;
 }
+
+// SVG Icons for node types
+const NodeTypeIcons = {
+  user: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <circle cx="9" cy="5" r="3.5" />
+      <path d="M2 16a7 7 0 0114 0" />
+    </svg>
+  ),
+  assistant: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <rect x="2" y="2" width="14" height="11" rx="2" />
+      <circle cx="6" cy="8" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="8" r="1.5" fill="currentColor" />
+    </svg>
+  ),
+  system: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <circle cx="9" cy="9" r="3" />
+      <path d="M14.5 9a5.5 5.5 0 00-.5-2l1.5-1.5-1.5-1.5L12.5 5.5a5.5 5.5 0 00-2-.5V3h-3v2a5.5 5.5 0 00-2 .5L4 4 2.5 5.5 4 7a5.5 5.5 0 00-.5 2H1.5v3h2a5.5 5.5 0 00.5 2L2.5 15.5 4 17l1.5-1.5a5.5 5.5 0 002 .5v2h3v-2a5.5 5.5 0 002-.5L14 17l1.5-1.5L14 14a5.5 5.5 0 00.5-2h2v-3h-2z" />
+    </svg>
+  ),
+};
 
 export default function NodeEditModal({ nodeId, onClose }: NodeEditModalProps) {
   const { nodes, updateNode, deleteNode, settings } = useCanvasStore();
@@ -14,6 +39,9 @@ export default function NodeEditModal({ nodeId, onClose }: NodeEditModalProps) {
   const [content, setContent] = useState('');
   const [summary, setSummary] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  const summaryInputId = useId();
+  const contentTextareaId = useId();
 
   useEffect(() => {
     if (node) {
@@ -53,95 +81,113 @@ export default function NodeEditModal({ nodeId, onClose }: NodeEditModalProps) {
     }
   };
 
-  const getNodeTypeLabel = () => {
+  const getNodeTypeInfo = () => {
     switch (node.type) {
       case 'user':
-        return '👤 사용자 메시지';
+        return { icon: NodeTypeIcons.user, label: '사용자 메시지', color: 'var(--accent-primary)' };
       case 'assistant':
-        return '🤖 AI 응답';
+        return { icon: NodeTypeIcons.assistant, label: 'AI 응답', color: 'var(--accent-secondary)' };
       case 'system':
-        return '⚙️ 시스템 프롬프트';
+        return { icon: NodeTypeIcons.system, label: '시스템 프롬프트', color: 'var(--text-muted)' };
       default:
-        return '💬 메시지';
+        return { icon: NodeTypeIcons.user, label: '메시지', color: 'var(--text-primary)' };
     }
   };
 
+  const nodeTypeInfo = getNodeTypeInfo();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-2xl bg-gray-800 rounded-lg shadow-xl">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white">{getNodeTypeLabel()}</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-xl"
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={`${nodeTypeInfo.label}`}
+      maxWidth="2xl"
+      footer={
+        <div className="flex justify-between w-full">
+          <ModalButton variant="danger" onClick={handleDelete}>
+            삭제
+          </ModalButton>
+          <div className="flex gap-2">
+            <ModalButton variant="secondary" onClick={onClose}>
+              취소
+            </ModalButton>
+            <ModalButton
+              variant="primary"
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <span className="flex items-center gap-2">
+                  <Spinner size="sm" variant="white" />
+                  저장 중...
+                </span>
+              ) : (
+                '저장'
+              )}
+            </ModalButton>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {/* 노드 타입 표시 */}
+        <div className="flex items-center gap-2 text-sm">
+          <span style={{ color: nodeTypeInfo.color }}>{nodeTypeInfo.icon}</span>
+          <span className="text-[var(--text-muted)]">{nodeTypeInfo.label}</span>
+        </div>
+
+        {/* 요약 */}
+        <div>
+          <label
+            htmlFor={summaryInputId}
+            className="block text-sm font-medium text-[var(--text-secondary)] mb-1"
           >
-            ✕
-          </button>
+            요약 (노드에 표시됨)
+          </label>
+          <input
+            id={summaryInputId}
+            type="text"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="자동 생성됩니다..."
+            className="w-full px-3 py-2 bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+          />
         </div>
 
         {/* 내용 */}
-        <div className="p-4 space-y-4">
-          {/* 요약 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              요약 (노드에 표시됨)
-            </label>
-            <input
-              type="text"
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="자동 생성됩니다..."
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-pink-500"
-            />
-          </div>
-
-          {/* 내용 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              내용
-            </label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="메시지 내용을 입력하세요..."
-              className="w-full h-64 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-pink-500 resize-none font-mono text-sm"
-            />
-          </div>
-
-          {/* 메타 정보 */}
-          <div className="flex gap-4 text-sm text-gray-400">
-            {node.model && <span>모델: {node.model}</span>}
-            {node.tokenCount && <span>토큰: {node.tokenCount.toLocaleString()}</span>}
-            <span>생성: {new Date(node.createdAt).toLocaleString()}</span>
-          </div>
+        <div>
+          <label
+            htmlFor={contentTextareaId}
+            className="block text-sm font-medium text-[var(--text-secondary)] mb-1"
+          >
+            내용
+          </label>
+          <textarea
+            id={contentTextareaId}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="메시지 내용을 입력하세요..."
+            className="w-full h-64 px-3 py-2 bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] resize-none font-mono text-sm"
+          />
         </div>
 
-        {/* 버튼 */}
-        <div className="flex justify-between px-4 py-3 border-t border-gray-700">
-          <button
-            onClick={handleDelete}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-          >
-            삭제
-          </button>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
-            >
-              취소
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isSaving ? '저장 중...' : '저장'}
-            </button>
-          </div>
+        {/* 메타 정보 */}
+        <div className="flex flex-wrap gap-4 text-sm text-[var(--text-muted)] p-3 bg-[var(--bg-elevated)] rounded-[var(--radius-md)]">
+          {node.model && (
+            <span>
+              <span className="text-[var(--text-secondary)]">모델:</span> {node.model}
+            </span>
+          )}
+          {node.tokenCount && (
+            <span>
+              <span className="text-[var(--text-secondary)]">토큰:</span> {node.tokenCount.toLocaleString()}
+            </span>
+          )}
+          <span>
+            <span className="text-[var(--text-secondary)]">생성:</span> {new Date(node.createdAt).toLocaleString()}
+          </span>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

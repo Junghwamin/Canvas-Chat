@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, memo } from 'react';
+import { useEffect, useRef, memo, useState } from 'react';
 import type { ReactNode } from 'react';
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
@@ -38,18 +38,27 @@ const CodeBlock = memo(({ code, language }: { code: string; language: string }) 
     const codeRef = useRef<HTMLElement>(null);
 
     useEffect(() => {
-        if (codeRef.current) {
-            try {
-                const result = hljs.highlight(code, {
-                    language: language || 'plaintext',
-                    ignoreIllegals: true
-                });
-                codeRef.current.innerHTML = result.value;
-            } catch {
-                // 언어를 찾을 수 없으면 일반 텍스트로 표시
-                codeRef.current.textContent = code;
+        const highlightCode = async () => {
+            if (codeRef.current) {
+                try {
+                    const result = hljs.highlight(code, {
+                        language: language || 'plaintext',
+                        ignoreIllegals: true
+                    });
+                    // DOMPurify를 동적으로 로드하여 XSS 방지 (SSR 호환)
+                    if (typeof window !== 'undefined') {
+                        const DOMPurify = (await import('dompurify')).default;
+                        codeRef.current.innerHTML = DOMPurify.sanitize(result.value);
+                    } else {
+                        codeRef.current.textContent = code;
+                    }
+                } catch {
+                    // 언어를 찾을 수 없으면 일반 텍스트로 표시
+                    codeRef.current.textContent = code;
+                }
             }
-        }
+        };
+        highlightCode();
     }, [code, language]);
 
     const displayLanguage = language?.toUpperCase() || 'CODE';

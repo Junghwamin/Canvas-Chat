@@ -84,22 +84,53 @@ export default function Canvas() {
       }));
   }, []);
 
-  // 하위 노드 수를 재귀적으로 계산
-  const countDescendants = useCallback((nodeId: string): number => {
-    const children = chatNodes.filter(n => n.parentId === nodeId);
-    let count = children.length;
-    for (const child of children) {
-      count += countDescendants(child.id);
+  // 자식 노드 맵 생성 (O(n) 한 번만 - 성능 최적화)
+  const childrenMap = useMemo(() => {
+    const map = new Map<string, ChatNode[]>();
+    for (const node of chatNodes) {
+      if (node.parentId) {
+        const siblings = map.get(node.parentId) || [];
+        siblings.push(node);
+        map.set(node.parentId, siblings);
+      }
     }
-    return count;
+    return map;
   }, [chatNodes]);
 
-  // 접혀있는 노드의 하위 노드 ID 목록 가져오기
+  // 자손 수 캐시 (memoized - O(n) 한 번만)
+  const descendantCountCache = useMemo(() => {
+    const cache = new Map<string, number>();
+
+    const count = (nodeId: string): number => {
+      if (cache.has(nodeId)) return cache.get(nodeId)!;
+
+      const children = childrenMap.get(nodeId) || [];
+      let total = children.length;
+      for (const child of children) {
+        total += count(child.id);
+      }
+      cache.set(nodeId, total);
+      return total;
+    };
+
+    // 모든 노드에 대해 미리 계산
+    for (const node of chatNodes) {
+      count(node.id);
+    }
+    return cache;
+  }, [chatNodes, childrenMap]);
+
+  // 하위 노드 수를 O(1)로 조회
+  const countDescendants = useCallback((nodeId: string): number => {
+    return descendantCountCache.get(nodeId) || 0;
+  }, [descendantCountCache]);
+
+  // 접혀있는 노드의 하위 노드 ID 목록 가져오기 (Map 기반 최적화)
   const getHiddenNodeIds = useCallback((): Set<string> => {
     const hiddenIds = new Set<string>();
 
     const collectDescendants = (parentId: string) => {
-      const children = chatNodes.filter(n => n.parentId === parentId);
+      const children = childrenMap.get(parentId) || [];
       for (const child of children) {
         hiddenIds.add(child.id);
         collectDescendants(child.id);
@@ -114,7 +145,7 @@ export default function Canvas() {
     }
 
     return hiddenIds;
-  }, [chatNodes]);
+  }, [chatNodes, childrenMap]);
 
   // 노드 콜백 함수들 (노드 컴포넌트에 전달) - onToggleCollapse 포함
   const nodeCallbacks = useMemo(() => ({

@@ -9,6 +9,7 @@ import SettingsModal from '@/components/canvas-org/ui/SettingsModal';
 import SearchModal from '@/components/canvas-org/ui/SearchModal';
 import ExportModal from '@/components/canvas-org/ui/ExportModal';
 import Toast from '@/components/canvas-org/ui/Toast';
+import Spinner from '@/components/ui/Spinner';
 import '@xyflow/react/dist/style.css';
 
 export default function CanvasPage() {
@@ -61,14 +62,17 @@ export default function CanvasPage() {
 
     if (!isLoaded) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
-                <div className="animate-spin h-8 w-8 border-4 border-cyan-400 border-t-transparent rounded-full"></div>
+            <div className="flex h-screen items-center justify-center bg-[var(--bg-base)]">
+                <div className="flex flex-col items-center gap-4">
+                    <Spinner size="xl" />
+                    <span className="text-[var(--text-muted)] text-sm">로딩 중...</span>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="flex h-screen bg-gray-900">
+        <div className="flex h-screen bg-[var(--bg-base)]">
             {/* 사이드바 */}
             <Sidebar onOpenSettings={() => setShowSettings(true)} />
 
