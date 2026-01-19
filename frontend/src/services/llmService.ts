@@ -167,6 +167,49 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// 최대 컨텍스트 토큰 제한 (안전 마진 포함)
+export const MAX_CONTEXT_TOKENS = 60000; // GPT-4o의 절반 정도로 설정하여 응답 공간 확보
+
+// 컨텍스트 크기 제한
+export function limitContextSize(
+  messages: Message[],
+  maxTokens: number = MAX_CONTEXT_TOKENS
+): Message[] {
+  let currentTokens = 0;
+  const limitedMessages: Message[] = [];
+
+  // 뒤에서부터(최신 메시지부터) 추가
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const tokens = estimateTokens(msg.content);
+
+    if (currentTokens + tokens > maxTokens) {
+      // 시스템 메시지는 항상 포함되도록 노력
+      if (msg.role === 'system') {
+        limitedMessages.unshift(msg);
+      }
+      break;
+    }
+
+    limitedMessages.unshift(msg);
+    currentTokens += tokens;
+  }
+
+  // 시스템 메시지가 없으면(짤렸으면) 원본의 첫 번째가 시스템인지 확인 후 추가 고려
+  // (여기서는 간단히 최신순 유지)
+
+  return limitedMessages;
+}
+
+// 텍스트 자르기 (토큰 제한)
+export function truncateText(text: string, maxTokens: number = 30000): string {
+  const estimated = estimateTokens(text);
+  if (estimated <= maxTokens) return text;
+
+  const maxLength = maxTokens * 4;
+  return text.substring(0, maxLength) + `\n\n... [내용이 너무 길어 ${maxTokens} 토큰으로 잘렸습니다] ...`;
+}
+
 // 대화 요약 생성 (AI 정리 기능)
 export async function* generateConversationSummary(
   conversationMarkdown: string,

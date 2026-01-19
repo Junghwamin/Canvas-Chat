@@ -3,7 +3,7 @@ import type { DragEvent } from 'react';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import type { ModelType, Message } from '../../../types';
 import { MODELS } from '../../../types';
-import { streamChat, streamChatWithImages, generateSummary, estimateTokens } from '../../../services/llmService';
+import { streamChat, streamChatWithImages, generateSummary, estimateTokens, truncateText, limitContextSize } from '../../../services/llmService';
 import { processAndSaveAttachment, formatFileSize, getFileType, imageToBase64, readTextFile, extractPdfText } from '../../../services/fileService';
 import { splitByHeadings, calculateSplitNodePositions, SPLIT_MODE_PROMPT } from '../../../services/splitResponseService';
 import Spinner from '../../ui/Spinner';
@@ -139,10 +139,12 @@ export default function InputPanel(_props: InputPanelProps) {
             });
             return '';
           } else if (attachment.type === 'pdf') {
-            const pdfText = await extractPdfText(attachment.file);
+            let pdfText = await extractPdfText(attachment.file);
+            pdfText = truncateText(pdfText); // 토큰 제한 적용
             return pdfText ? `\n\n[PDF: ${attachment.file.name}]\n${pdfText}` : '';
           } else if (attachment.type === 'text' || attachment.type === 'code') {
-            const text = await readTextFile(attachment.file);
+            let text = await readTextFile(attachment.file);
+            text = truncateText(text); // 토큰 제한 적용
             return `\n\n[${attachment.file.name}]\n\`\`\`\n${text}\n\`\`\``;
           }
           return '';
@@ -181,29 +183,36 @@ export default function InputPanel(_props: InputPanelProps) {
         await updateNode(userNode.id, { attachments: savedAttachmentIds });
       }
 
-      // 맥락 구성
+      // 맥락 구성 (스마트 컨텍스트 관리)
       const path = await getPathToRoot(userNode.id);
-      const messages: Message[] = [];
+      const rawMessages: Message[] = [];
 
-      // 시스템 프롬프트 (분할 모드일 때 추가 지시사항 포함)
+      // 시스템 프롬프트
       let systemPromptContent = currentCanvas.systemPrompt || '';
       if (currentCanvas.splitMode) {
         systemPromptContent += SPLIT_MODE_PROMPT;
       }
       if (systemPromptContent) {
-        messages.push({ role: 'system', content: systemPromptContent });
+        rawMessages.push({ role: 'system', content: systemPromptContent });
       }
 
-      // 경로의 모든 메시지
+      // 경로의 메시지들 (압축된 내용이나 요약 사용 우선)
       for (const node of path) {
         if (node.type === 'system') continue;
-        messages.push({
+
+        // 너무 옛날 메시지는 summary만 사용하거나 compressedContent 사용
+        const content = node.isCompressed && node.compressedContent
+          ? node.compressedContent
+          : node.content;
+
+        rawMessages.push({
           role: node.type === 'user' ? 'user' : 'assistant',
-          content: node.isCompressed && node.compressedContent
-            ? node.compressedContent
-            : node.content,
+          content,
         });
       }
+
+      // 토큰 한도 내에서 메시지 구성
+      const messages = limitContextSize(rawMessages);
 
       // AI 응답 노드 생성 (빈 상태로)
       const aiNode = await addNode({
@@ -458,8 +467,8 @@ export default function InputPanel(_props: InputPanelProps) {
           <button
             onClick={() => updateCanvas(currentCanvas.id, { splitMode: !currentCanvas.splitMode })}
             className={`px-3 py-2 border rounded-[var(--radius-md)] text-sm transition-colors flex items-center gap-1.5 ${currentCanvas.splitMode
-                ? 'bg-[var(--accent-secondary)] border-[var(--accent-secondary)] text-white'
-                : 'bg-[var(--bg-elevated)] border-[var(--border-default)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+              ? 'bg-[var(--accent-secondary)] border-[var(--accent-secondary)] text-white'
+              : 'bg-[var(--bg-elevated)] border-[var(--border-default)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
               }`}
             aria-label={`응답 분할 모드 ${currentCanvas.splitMode ? '켜짐' : '꺼짐'}`}
             aria-pressed={currentCanvas.splitMode}
