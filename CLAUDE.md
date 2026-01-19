@@ -63,6 +63,13 @@ Documents Q&A 응답에서 통계 데이터를 감지하여 Excel/차트로 내�
 npm install xlsx recharts html2canvas
 ```
 
+### 🐛 Bug Fix: PDF 읽기 오류 수정
+- **문제**: Next.js 환경에서 최신 `pdfjs-dist` (v5+) 사용 시 `Object.defineProperty` 런타임 에러 발생
+- **해결**: 
+  - `pdfjs-dist` 버전을 `4.8.69`로 다운그레이드
+  - `fileService.ts`에서 Worker 로딩 방식을 `unpkg` CDN 사용으로 변경
+- **수정된 파일**: `frontend/package.json`, `frontend/src/services/fileService.ts`
+
 ---
 
 ## 업데이트 일자: 2026-01-18
