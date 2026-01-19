@@ -21,7 +21,7 @@
     "nanoid": "^5.1.6",
     "next": "^15.0.4",
     "openai": "^6.16.0",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "^4.8.69",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
