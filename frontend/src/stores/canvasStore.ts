@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Canvas, ChatNode, APISettings, ModelType } from '../types';
 import { canvasService, nodeService, settingsService } from '../db';
+import { DEFAULT_SYSTEM_PROMPT } from '../constants/prompts';
 
 interface CanvasState {
   // 캔버스 목록
@@ -68,7 +69,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
   },
 
-  createCanvas: async (name: string, systemPrompt = '') => {
+  createCanvas: async (name: string, systemPrompt = DEFAULT_SYSTEM_PROMPT) => {
     const canvas = await canvasService.create({
       name,
       systemPrompt,
